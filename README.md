@@ -22,6 +22,11 @@ In addition, it allows you to group adjacent similar events together (to ignore 
 #### Events distributions accross sessions:
 ![Distributions](https://github.com/omri374/eventsVis/raw/master/img/distributions.png)
 
+
+#### SQL querying: 
+![SQL](https://github.com/omri374/eventsVis/raw/master/img/sql.png)
+
+
 In order to run it, open the project in R studio, open the server.R file and click on the play button. Another option is to call 
 
 
