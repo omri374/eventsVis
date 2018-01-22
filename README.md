@@ -1,4 +1,4 @@
-O# eventsVis
+# eventsVis
 A tool for analyzing and visualizing time series descrete events.
 
 This tool uses the [shiny framework](https://shiny.rstudio.com/) for visualizing events.
@@ -30,6 +30,7 @@ In addition, it allows you to group adjacent similar events together (to ignore 
 
 ### Run the app locally:
 Option 1: Open the project in R studio, open the server.R file and click on the play button. 
+
 Option 2: Install the 'shiny' package and call
 
 
