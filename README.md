@@ -16,6 +16,7 @@ You can see a live example of the tool on ShinyApps:
 #### Timeline (based on Google Timeline chart and R's googleVis package):
 ![Timeline](https://github.com/omri374/eventsVis/raw/master/img/timeline.png)
 
+In addition, it allows you to group adjacent similar events together (to ignore the effect of multiple events calls that are actually one event in reality).
 
 
 #### Events distributions accross sessions:
