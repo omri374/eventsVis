@@ -70,7 +70,7 @@ ui <- dashboardPage(
                     
                     Start and end should be dates in the format <I>YYYY-MM-DD hh:mm:ss TZ</I>, although other formats might work as well<BR>")
       ),
-      tabPanel("Events", 
+      tabPanel("Timeline", 
                htmlOutput("timeline")
                , style = "overflow:scroll;"),
       tabPanel("Events distribution",
