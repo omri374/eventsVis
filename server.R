@@ -240,7 +240,7 @@ shinyServer(function(input, output, session) {
   
   ####------ consecutive visNetwork ----- #####
   output$consecutives <- renderVisNetwork({
-    debugSource("R/networkUtils.R")
+    source("R/networkUtils.R")
     input$sessionSelect
     dataset = getDataset()
     if(!is.null(dataset)){
