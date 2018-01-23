@@ -24,6 +24,7 @@ In addition, it allows you to group adjacent similar events together (to ignore 
 
 #### Consecutive events analysis
 Which events occur after others?
+
 ![Consecutive](https://github.com/omri374/eventsVis/raw/master/img/consecutive.png)
 
 
