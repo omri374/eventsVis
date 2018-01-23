@@ -24,12 +24,13 @@ library(data.table)
 library(dplyr)
 library(DT)
 library(ggvis)
+library(visNetwork)
 
 ui <- dashboardPage(
   
-
   
-  dashboardHeader(title = "Events Visualization Tool",titleWidth = "30%"),
+  
+  dashboardHeader(title = "Events Visualization Tool",titleWidth = "350px"),
   
   dashboardSidebar(
     tags$head(
@@ -38,25 +39,22 @@ ui <- dashboardPage(
                       color: black;
                       }
                       "))
-      ),
-    box(title = "Session selection",status = "info", solidHeader = TRUE,
-        collapsible = TRUE, width = "18%",background = "black",
-        fileInput("inputFile", "Choose CSV File",
-                  multiple = FALSE,
-                  accept = c("text/csv",
-                             "text/comma-separated-values,text/plain",
-                             ".csv"),placeholder = ""),
-        
-        shiny::htmlOutput("sessionSelect"),
-        uiOutput("slider",width = "100px")
-    ), 
-    
-    box(title = "Group adjacent events",status = "info",solidHeader = TRUE,
-        collapsible = TRUE, width = "18%", background = "black",
-        checkboxInput("groupAdjacent",label = "Group adjacent events together",value = FALSE),
-        numericInput("minGap","Minimum gap for grouping (seconds)",min = 0,value = 5)),
-    
-    width = '20%'),
+    ),
+    sidebarMenu(
+      fileInput("inputFile", "Choose CSV File",
+                multiple = FALSE,
+                accept = c("text/csv",
+                           "text/comma-separated-values,text/plain",
+                           ".csv"),placeholder = ""),
+      
+      shiny::htmlOutput("sessionSelect"),
+      uiOutput("slider",width = "100px"),
+      
+      
+      
+      checkboxInput("groupAdjacent",label = "Group adjacent events together",value = FALSE),
+      numericInput("minGap","Minimum gap for grouping (seconds)",min = 0,value = 5)
+      ,width = "250px")),
   dashboardBody(    
     
     tabsetPanel(
@@ -71,19 +69,33 @@ ui <- dashboardPage(
                     - <B><I>sessionId</I></B> (optional, for example: userId, session, sensorId etc.)            <BR> <BR>
                     
                     Start and end should be dates in the format <I>YYYY-MM-DD hh:mm:ss TZ</I>, although other formats might work as well<BR>")
-               ),
+      ),
       tabPanel("Events", 
                htmlOutput("timeline")
-      , style = "overflow:scroll;"),
+               , style = "overflow:scroll;"),
       tabPanel("Events distribution",
-               h3("Compare event distribution in sessions:"),
-               
-               ggvis::ggvisOutput(plot_id = "distributions"),
-               sliderInput("numEventsForDistribution","Number of event types to present",min = 1,value = 10, max = 50,step = 1)
+               fluidRow(
+                 sliderInput("numEventsForDistribution","Number of event types to present",min = 1,value = 10, max = 50,step = 1),
+                 box(title = "Event distribution within session", width = 5, solidHeader = TRUE, status = "primary",
+                     plotOutput("inSessionDistribution")),
+                 box(title = "Compare event distribution between sessions", width = 5, solidHeader = TRUE, status = "primary",
+
+                     ggvis::ggvisOutput(plot_id = "distributions"))
                ),
+               fluidRow(
+                 box(title = "Consecutive events analysis", solidHeader = TRUE, status = "primary", width = 10,
+                     checkboxInput("consecutivePerSession",label = "All sessions",value = FALSE),
+                     h2(textOutput('visNetworkTitle')),
+                     radioButtons("byDuration",label="Aggregation type",choices = c("Sum by duration","Count events"),selected = "Sum by duration"),
+                     numericInput("maxTimeForConsecutiveInSeconds",label = "Max time for events to be considered consecutive",min = 1,value = 50,width = '15%'),
+                     
+                     visNetwork::visNetworkOutput("consecutives"))
+                 
+                 
+               )),
       tabPanel("Raw Data",
                textInput("query",label = "Enter SQL Query",value = "SELECT * FROM dataset",width = '80%'),
-
+               
                DT::dataTableOutput("sql")
       )
       

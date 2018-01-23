@@ -8,6 +8,10 @@ if(!require(lubridate)) install.packages("lubridate")
 if(!require(sqldf)) install.packages("sqldf")
 if(!require(parsedate)) install.packages("parsedate")
 if(!require(ggvis)) install.packages("ggvis")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggthemes)) install.packages("ggthemes")
+if(!require(visNetwork)) install.packages("visNetwork")
+
 
 library(shiny)
 library(shinydashboard)
@@ -17,15 +21,17 @@ library(dplyr)
 library(DT)
 library(sqldf)
 library(ggvis)
+library(ggplot2)
+library(visNetwork)
+library(RColorBrewer)
 
 shinyServer(function(input, output, session) {
   
+  ####-------- Reactive functions (data aquisition) --------#####
+  
+  
   getDataset <- reactive({
     library(data.table)
-    
-    
-    
-    
     
     dataset <- withProgress({
       if(is.null(input$inputFile)){
@@ -101,6 +107,8 @@ shinyServer(function(input, output, session) {
     s
   })
   
+  ####-------- Timeline plot --------#####
+  
   output$timeline <- googleVis::renderGvis({
     source("R/timelineUtils.R")
     sessionDataset = getFilteredDataset()
@@ -141,6 +149,9 @@ shinyServer(function(input, output, session) {
     
   })
   
+  ####-------- DT (tabular) --------#####
+  
+  
   output$sql <- DT::renderDataTable({
     dataset = getFilteredDataset()
     
@@ -154,6 +165,8 @@ shinyServer(function(input, output, session) {
     lengthMenu = c(5, 10, 15, 20,100)
   )
   )
+  
+  ####-------- across sessions plots --------#####
   
   distributionsVis <- reactive({
     dataset = getDataset()
@@ -171,16 +184,16 @@ shinyServer(function(input, output, session) {
         events <- events[1:input$numEventsForDistribution]
       }
     }
-    print(events)
+    #print(events)
     
-    dataset <- dataset %>% filter(event %in% names(events))
+    dataset <- dataset %>% filter(event %in% names(events)) %>% mutate(duration = as.integer(end) - as.integer(start))
     
     
     
-    grouped <- dataset %>% group_by(sessionId,event) %>% summarize(count = n()) %>% mutate(freq = count / sum(count))
-
- 
-    print(grouped)
+    grouped <- dataset %>% group_by(sessionId,event) %>% summarize(totalDuration = sum(duration)) %>% mutate(freq = totalDuration / sum(totalDuration))
+    
+    
+    #print(grouped)
     
     grouped %>% 
       ggvis(y = ~sessionId, fill = ~event) %>%
@@ -189,12 +202,72 @@ shinyServer(function(input, output, session) {
       add_axis("y", title = "Session") %>%
       add_axis("x", title = "Percentage") %>% add_tooltip(function(data){data$event}, "hover")
   })
-  
   distributionsVis %>% bind_shiny("distributions")
   
   
+  ####-------- in session plots --------#####
+  
+  output$inSessionDistribution <- renderPlot({
+    dataset = getFilteredDataset()
+    if(!is.null(dataset)){
+      
+      dataset$event <- paste0(dataset$type,": ",dataset$label)
+      
+      
+      events <- unlist(sort(table(dataset$event),decreasing = T))
+      if(!is.na(input$numEventsForDistribution)){
+        print(input$numEventsForDistribution)
+        if(input$numEventsForDistribution < length(events)){
+          events <- events[1:input$numEventsForDistribution]
+        }
+      }
+      #print(events)
+      
+      dataset <- dataset %>% filter(event %in% names(events)) %>% mutate(duration = as.integer(end) - as.integer(start))
+      grouped <- dataset %>% group_by(event) %>% summarize(totalDuration = as.integer(sum(duration)))
+      
+      library(ggplot2)
+      library(ggthemes)
+      ggplot(grouped, aes(event, totalDuration)) + geom_col() + ggtitle(paste("Total duration per event in session",input$sessionSelect)) +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+      
+      
+
+      
+    } 
+  })
   
   
+  ####------ consecutive visNetwork ----- #####
+  output$consecutives <- renderVisNetwork({
+    debugSource("R/networkUtils.R")
+    input$sessionSelect
+    dataset = getDataset()
+    if(!is.null(dataset)){
+      if(input$consecutivePerSession==FALSE){
+        session = input$sessionSelect
+        getVisNetwork(events = dataset,sesId = session,maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
+      } else{
+        getVisNetwork(events = dataset,sesId = NULL, maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
+      }  
+    }
+  })
   
+  output$visNetworkTitle <- renderText({
+    # We'll use the input$controller variable multiple times, so save it as x
+    # for convenience.
+    x <- input$consecutivePerSession
+    
+    # This will change the value of input$inText, based on x
+    if(x==TRUE){
+      paste("Which events occur after other events across all sessions?")
+    } else{
+      paste("Which events occur after other events? (session", input$sessionSelect,"only)")
+    }
+  })
+    
+    
+
+
   
 })
