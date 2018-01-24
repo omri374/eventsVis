@@ -10,6 +10,11 @@ getTimeline = function(sessionDataset, joinNeighbors = TRUE, joinGapInSeconds = 
   
   sessionDataset <- sessionDataset %>% select(type,label,start,end)
   
+  if(is.numeric(sessionDataset$start)){
+    sessionDataset$start <- as.POSIXct(sessionDataset$start,origin = "1970-01-01",tz = "UTC")
+    sessionDataset$end <- as.POSIXct(sessionDataset$end,origin = "1970-01-01",tz = "UTC")
+  }
+  
   if(joinNeighbors & joinGapInSeconds > 0){
     toTimeLine <- joinAdjacentEvents(sessionDataset,minGapInSeconds = joinGapInSeconds)
   } else{
@@ -26,8 +31,7 @@ getTimeline = function(sessionDataset, joinNeighbors = TRUE, joinGapInSeconds = 
                      options=list(timeline="{showRowLabels:true, colorByRowLabel:true}",
                                   colors= "['#cbb69d', '#603913', '#c69c6e']",
                                   
-                                  width = "automatic",
-                                  height = 'automatic'))
+                                  width = "automatic"))
   
   tl
   
@@ -38,6 +42,7 @@ getTimeline = function(sessionDataset, joinNeighbors = TRUE, joinGapInSeconds = 
 
 
 joinAdjacentEvents <- function(sessionEvents, minGapInSeconds=10){
+  
   library(lubridate)
   
   colnames <- names(sessionEvents)
@@ -46,9 +51,7 @@ joinAdjacentEvents <- function(sessionEvents, minGapInSeconds=10){
     group_by(type,label) %>%                                                     # for each label and type
     mutate(
       prevEnd = lag(end),
-      dist = as.numeric(difftime(start,                                 # calculate timerange between adjacent events 
-                                      lag(end),           
-                                      units = "secs"))) %>%
+      dist = difftime(start, lag(end), units = "secs")) %>%
     mutate(isDistinct = ifelse(is.na(dist) | dist > minGapInSeconds, 1, 0),                # flag distinct events: distances > minGapInSeconds''
            joinedEventId = cumsum(isDistinct)) %>%                             # create session id
     group_by(type,label, joinedEventId) %>%                                      # group by adjacent types, labels and joints

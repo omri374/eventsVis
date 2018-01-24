@@ -7,7 +7,6 @@ if(!require(DT)) install.packages("DT")
 if(!require(lubridate)) install.packages("lubridate")
 if(!require(sqldf)) install.packages("sqldf")
 if(!require(parsedate)) install.packages("parsedate")
-if(!require(ggvis)) install.packages("ggvis")
 if(!require(ggplot2)) install.packages("ggplot2")
 if(!require(ggthemes)) install.packages("ggthemes")
 if(!require(visNetwork)) install.packages("visNetwork")
@@ -20,7 +19,6 @@ library(data.table)
 library(dplyr)
 library(DT)
 library(sqldf)
-library(ggvis)
 library(ggplot2)
 library(visNetwork)
 library(RColorBrewer)
@@ -37,22 +35,30 @@ shinyServer(function(input, output, session) {
       if(is.null(input$inputFile)){
         dataset <- fread("data/sample.csv",stringsAsFactors = F)
       } else{
-        dataset <- fread(input$inputFile$datapath,stringsAsFactors = F,na.strings=c("NA","N/A","null",""," "))
+        dataset <- fread(input$inputFile$datapath,stringsAsFactors = F,na.strings=c("NA","N/A","null",""," "),showProgress = T)
       }
       
       if(is.null(dataset)){
         return(NULL)
       }
       if(!is.null(dataset$start)){
-        dataset$start <- parsedate::parse_date(dataset$start)
+        if(!is.numeric(dataset$start)){
+          dataset$start <- parsedate::parse_date(dataset$start)
+        }
       }
       if(!is.null(dataset$end)){
-        dataset$end <- parsedate::parse_date(dataset$end)
+        if(!is.numeric(dataset$end)){
+          dataset$end <- parsedate::parse_date(dataset$end)
+        }
+      } else{
+        dataset$end <- dataset$start + 1
       }
       
       if(is.null(dataset$sessionId)){
         dataset$sessionId <- 1
       }
+      
+      dataset$type <- as.factor(dataset$type)
       
       return(dataset)
       
@@ -76,7 +82,7 @@ shinyServer(function(input, output, session) {
   })
   
   
-  getFilteredDataset <- reactive({
+  getFilteredSession <- reactive({
     dataset <- getDataset()
     if(!is.null(dataset) & !is.null(input$slider) & !is.null(input$sessionSelect)){
       filtered <- dataset %>% filter(start >= input$slider[1], end <= input$slider[2], sessionId == input$sessionSelect) %>% data.frame()
@@ -86,8 +92,18 @@ shinyServer(function(input, output, session) {
     
   })
   
+  getFilteredEntireDataset <- reactive({
+    dataset <- getDataset()
+    if(!is.null(dataset) & !is.null(input$slider) & !is.null(input$sessionSelect)){
+      filtered <- dataset %>% filter(start >= input$slider[1], end <= input$slider[2]) %>% data.frame()
+      return(filtered)
+    }
+    return(NULL)
+  })
+  
   
   output$sessionSelect <- renderUI({
+    input$inputFile
     sessions <- getSessions()
     if(is.null(sessions)){
       return(NULL)
@@ -111,7 +127,7 @@ shinyServer(function(input, output, session) {
   
   output$timeline <- googleVis::renderGvis({
     source("R/timelineUtils.R")
-    sessionDataset = getFilteredDataset()
+    sessionDataset = getFilteredSession()
     
     
     validate(
@@ -136,6 +152,7 @@ shinyServer(function(input, output, session) {
     
     
     validate(
+      need(!is.null(sessionDataset$sessionId),"session column missing"),
       need(!is.null(sessionDataset$type),"type column missing"),
       need(!is.null(sessionDataset$start),"start column missing"),
       need(!is.null(sessionDataset$end),"end column missing"),
@@ -153,7 +170,7 @@ shinyServer(function(input, output, session) {
   
   
   output$sql <- DT::renderDataTable({
-    dataset = getFilteredDataset()
+    dataset = getFilteredSession()
     
     if(is.null(dataset)){
       return(data.frame())
@@ -168,8 +185,8 @@ shinyServer(function(input, output, session) {
   
   ####-------- across sessions plots --------#####
   
-  distributionsVis <- reactive({
-    dataset = getDataset()
+  output$distributions <- renderPlot({
+    dataset = getFilteredEntireDataset()
     if(is.null(dataset)){
       return(NULL)
     }
@@ -188,27 +205,20 @@ shinyServer(function(input, output, session) {
     
     dataset <- dataset %>% filter(event %in% names(events)) %>% mutate(duration = as.integer(end) - as.integer(start))
     
+    grouped <- dataset %>% group_by(sessionId,event) %>% summarize(totalDuration = sum(duration)) %>% mutate(Frequency = totalDuration)
     
     
-    grouped <- dataset %>% group_by(sessionId,event) %>% summarize(totalDuration = sum(duration)) %>% mutate(freq = totalDuration / sum(totalDuration))
-    
+    ggplot(grouped,aes(x = sessionId, y = Frequency,fill = event))+ ggtitle("Total duration per event across all sessions") + 
+      geom_bar(position = "fill",stat = "identity") + coord_flip()
     
     #print(grouped)
-    
-    grouped %>% 
-      ggvis(y = ~sessionId, fill = ~event) %>%
-      compute_stack(stack_var = ~freq, group_var = ~ sessionId) %>% 
-      layer_rects(x = ~stack_lwr_, x2 = ~stack_upr_, height = band()) %>%
-      add_axis("y", title = "Session") %>%
-      add_axis("x", title = "Percentage") %>% add_tooltip(function(data){data$event}, "hover")
+
   })
-  distributionsVis %>% bind_shiny("distributions")
-  
-  
+
   ####-------- in session plots --------#####
   
   output$inSessionDistribution <- renderPlot({
-    dataset = getFilteredDataset()
+    dataset = getFilteredSession()
     if(!is.null(dataset)){
       
       dataset$event <- paste0(dataset$type,": ",dataset$label)
@@ -232,7 +242,7 @@ shinyServer(function(input, output, session) {
         theme(axis.text.x = element_text(angle = 90, hjust = 1))
       
       
-
+      
       
     } 
   })
@@ -242,13 +252,13 @@ shinyServer(function(input, output, session) {
   output$consecutives <- renderVisNetwork({
     source("R/networkUtils.R")
     input$sessionSelect
-    dataset = getDataset()
+    dataset = getFilteredEntireDataset()
     if(!is.null(dataset)){
-      if(input$consecutivePerSession==FALSE){
+       if(input$consecutivePerSession==FALSE){
         session = input$sessionSelect
-        getVisNetwork(events = dataset,sesId = session,maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
+        getConsecutiveNetwork(events = dataset,sesId = session,maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
       } else{
-        getVisNetwork(events = dataset,sesId = NULL, maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
+        getConsecutiveNetwork(events = dataset,sesId = NULL, maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
       }  
     }
   })
@@ -265,9 +275,26 @@ shinyServer(function(input, output, session) {
       paste("Which events occur after other events? (session", input$sessionSelect,"only)")
     }
   })
+  
+  ####------ cooccurring events visNetwork ----- #####
+  output$cooccurring <- renderVisNetwork({
+    source("R/cooccurrenceUtils.R")
+    input$sessionSelect
+    dataset = getFilteredSession()
+    if(!is.null(dataset)){
+      getCooccurrenceGraph(sessionEvents = dataset,thresholdForCoccurring =input$cooccurrenceThreshold)
+    }  
     
+  })
+  
+  output$visNetworkCoocsTitle <- renderText({
     
-
-
+    paste("Which events co-occur with other events? (session", input$sessionSelect,"only)")
+    
+  })
+  
+  
+  
+  
   
 })

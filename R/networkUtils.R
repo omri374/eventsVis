@@ -1,19 +1,20 @@
 library(visNetwork)
 library(dplyr)
 library(RColorBrewer)
-getVisNetwork <- function(events, sesId, maxTimeForConsecutiveInSeconds = 1000,byDuration = TRUE){
+getConsecutiveNetwork <- function(events, sesId, maxTimeForConsecutiveInSeconds = 1000,byDuration = TRUE){
   
   if(missing(events) | is.null(events)){
     return(NULL)
   }
   print(paste("By duration?",byDuration))
-  events <- events %>% transmute(sessionId = sessionId, event = as.character(paste0(type,":",label)), start = start, end = end, duration = difftime(end,start,units = 'sec'))
+  events <- events %>% transmute(sessionId = sessionId, event = as.character(paste0(type,":",label)), start = start, end = end, 
+                                 duration = ifelse(is.numeric(start),end - start,difftime(end,start,units = 'sec')))
   
   if(byDuration){
-    eventsDf <- events %>% group_by(event) %>% summarize(value = sum(duration)) %>% mutate(id = 1:n())
+    eventsDf <- events %>% arrange(start) %>% group_by(event) %>% summarize(value = sum(duration)) %>% mutate(id = 1:n())
   } else{
     #By count
-    eventsDf <- events %>% group_by(event) %>% summarize(value = n()) %>% mutate(id = 1:n())
+    eventsDf <- events %>% arrange(start) %>%group_by(event) %>% summarize(value = n()) %>% mutate(id = 1:n())
   }
   
   edges <- data.frame(from = as.numeric(NULL), to = as.numeric(NULL))
@@ -38,30 +39,33 @@ getVisNetwork <- function(events, sesId, maxTimeForConsecutiveInSeconds = 1000,b
     }
     edges <- getConsequtiveInSession(sessionEvents,eventsDf,maxTimeForConsecutiveInSeconds)
   }
-  
-  nodes <- eventsDf %>% rename(label = event)
-  if(byDuration){
-    nodes$title <- paste0("<p> Total duration:", nodes$value,"</p>")
-  } else{
-    nodes$title <- paste0("<p> Count:", nodes$value,"</p>")
-  }
-  
-
-  
-  
   edges <- edges %>% group_by(from, to) %>% summarize(value = n())
   if(nrow(edges) > 0){
     edges$title <- paste0("<p> Count:",edges$value,"</p>")
-    #edges$color <- brewer.pal(nrow(edges),'BrBG')
-  }
-  if(nrow(nodes)>3){
-    nodes$color <- brewer.pal(nrow(nodes),'BrBG')
   }
   
- # visNetwork::visNetwork(nodes,edges) %>%  visEdges(arrows = "middle") %>%
-#    visOptions(highlightNearest = list(enabled = TRUE, degree = 2, hover = T))
-  visNetwork(nodes, edges, height = "600px")  %>%  visEdges(arrows = "middle") %>%
-    #visIgraphLayout() %>%
+  
+  
+  nodes <- eventsDf %>% rename(label = event)
+  if(byDuration){
+    nodes$title <- paste0("<p> <U>",nodes$label,"</U><BR> <b>Total duration</b> = ", nodes$value,"</p>")
+  } else{
+    nodes$title <- paste0("<p> <U>",nodes$label,"</U><BR> <b>Count</b> = ", nodes$value,"</p>")
+  }
+  
+  if(nrow(nodes)>3){
+    if(nrow(nodes) > 12){
+      colors <- rep(brewer.pal(12,'Paired'),nrow(nodes)/10)
+      nodes$color <- colors[1:nrow(nodes)]
+    } else{
+      nodes$color <- brewer.pal(nrow(nodes),'Paired')
+    }
+    
+
+  }
+  
+  
+  visNetwork(nodes, edges)  %>%  visEdges(arrows = "middle") %>%
     visNodes(size = 40) %>%
     visOptions(selectedBy = "label", 
                highlightNearest = TRUE, 
@@ -76,16 +80,30 @@ getVisNetwork <- function(events, sesId, maxTimeForConsecutiveInSeconds = 1000,b
 
 getConsequtiveInSession <- function(sessionEvents, eventsDf, maxTimeForConsecutiveInSeconds = 60){
   
-  consecutives <- sessionEvents %>% arrange(start) %>%
-    mutate(
-      nextStart = lead(start),
-      nextEvent = lead(event),
-      dist = as.numeric(difftime(lead(start),                                 # calculate timerange between adjacent events 
-                                 end,           
-                                 units = "secs"))) %>%
-    filter(dist < maxTimeForConsecutiveInSeconds & dist > 0) %>%
-    inner_join(eventsDf,by = c('event' = 'event')) %>%
-    inner_join(eventsDf,by = c("nextEvent" = "event"),suffix = c(".prev", ".next")) %>% select(from = id.prev,to = id.next)
+  isTimeNumeric <- is.numeric(sessionEvents$start)
+  
+  if(!isTimeNumeric){
+    consecutives <- sessionEvents %>% arrange(start) %>%
+      mutate(
+        nextStart = lead(start),
+        nextEvent = lead(event),
+        dist = difftime(lead(start),   end,    units = "secs")) %>%
+      filter(dist <= maxTimeForConsecutiveInSeconds & dist > 0) %>%
+      inner_join(eventsDf,by = c('event' = 'event')) %>%
+      inner_join(eventsDf,by = c("nextEvent" = "event"),suffix = c(".prev", ".next")) %>% select(from = id.prev,to = id.next)
+    
+  } else{
+    consecutives <- sessionEvents %>% arrange(start) %>%
+      mutate(
+        nextStart = lead(start),
+        nextEvent = lead(event),
+        dist = lead(start)-end) %>%
+      filter(dist <= maxTimeForConsecutiveInSeconds & dist > 0) %>%
+      inner_join(eventsDf,by = c('event' = 'event')) %>%
+      inner_join(eventsDf,by = c("nextEvent" = "event"),suffix = c(".prev", ".next")) %>% select(from = id.prev,to = id.next)
+    
+  }
+  
   
   consecutives
   
