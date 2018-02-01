@@ -35,14 +35,14 @@ In addition, it allows you to group adjacent similar events together (to ignore 
 ![Distributions](https://github.com/omri374/eventsVis/raw/master/img/distributions.png)
 
 ### Consecutive events analysis
-Which events occur after others?
+Which events occur after others? *Notice the cluster around kitchen activity*
 
 ![Consecutive](https://github.com/omri374/eventsVis/raw/master/img/consecutive.png)
 
 Visualization: visNetwork
 
 ### Co-occurring events analysis
-Which events co-occur together with others?
+Which events co-occur together with others? *Notice the cluster/clique around kitchen activity and around living room activity*
 
 ![Consecutive](https://github.com/omri374/eventsVis/raw/master/img/cooccurring.png)
 
