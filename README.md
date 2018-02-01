@@ -1,15 +1,23 @@
-# eventsVis
+# *eventsVis*
 A tool for analyzing and visualizing temporal descrete events.
+
+#### This tools allows the user to inspect events in various forms, to see the interactions of events of various types by looking at them temporaly, by looking at consecutive patterns and co-occurring patterns and by inspecting the overall duration or count of events througout time. 
+##### It also allows simple manipulations of the data such as grouping of adjacent similar events and deciding on co-occurrence and consecutive events thresholds
 
 This tool uses the [shiny framework](https://shiny.rstudio.com/) for visualizing events.
 In order to run it, you need to have [R](https://mran.microsoft.com/download) and preferably [Rstudio](https://www.rstudio.com/products/rstudio/download/).
 
-EventsVis currently supports these visualizations:
+### EventsVis currently supports these visualizations:
 * Timeline
 * Distribution of events
 * Consecutive events analysis
 * Co-occurring events analysis
 * SQL querying on dataset
+
+### Future plans:
+ * Context (time in day, day, holidays, season, weather, location and more)
+ * Various sequential rules discovery algorithms
+ * Common co-occurring and consecutive patterns discovery
 
 You can see a live example of the tool on ShinyApps (a bit slow but works):
 [https://omrimendels.shinyapps.io/eventsvis/]
@@ -17,23 +25,23 @@ You can see a live example of the tool on ShinyApps (a bit slow but works):
 
 ## Visualizations:
 
-#### Timeline (based on Google Timeline chart and R's googleVis package):
+### Timeline:
 ![Timeline](https://github.com/omri374/eventsVis/raw/master/img/timeline.png)
 
 In addition, it allows you to group adjacent similar events together (to ignore the effect of multiple events calls that are actually one event in reality).
 
 
-#### Events distributions accross sessions:
+### Events distributions accross sessions:
 ![Distributions](https://github.com/omri374/eventsVis/raw/master/img/distributions.png)
 
-#### Consecutive events analysis
+### Consecutive events analysis
 Which events occur after others?
 
 ![Consecutive](https://github.com/omri374/eventsVis/raw/master/img/consecutive.png)
 
 Visualization: visNetwork
 
-#### Co-occurring events analysis
+### Co-occurring events analysis
 Which events co-occur together with others?
 
 ![Consecutive](https://github.com/omri374/eventsVis/raw/master/img/cooccurring.png)
@@ -41,7 +49,7 @@ Which events co-occur together with others?
 Visualization: visNetwork
 
 
-## SQL querying: 
+### SQL querying: 
 ![SQL](https://github.com/omri374/eventsVis/raw/master/img/sql.png)
 
 
@@ -57,5 +65,16 @@ Option 2: Install the 'shiny' package and call
 
 or change '~/eventsVis' to the app path.
 
+#### Used packages:
+- shiny
+- shinydashboard
+- googleVis
+- data.table
+- dplyr
+- DT
+- sqldf
+- ggplot2
+- visNetwork
+- RColorBrewer
 
 ### Additional visualizations and interaction ideas are mostly welcome.
