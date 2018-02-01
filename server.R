@@ -23,17 +23,21 @@ library(ggplot2)
 library(visNetwork)
 library(RColorBrewer)
 
+TRY_PARSE_DATE <<- FALSE
+
 shinyServer(function(input, output, session) {
   
   ####-------- Reactive functions (data aquisition) --------#####
   
   
+  
+  ## Get + prep entire dataset from CSV
   getDataset <- reactive({
     library(data.table)
     
     dataset <- withProgress({
       if(is.null(input$inputFile)){
-        dataset <- fread("data/sample.csv",stringsAsFactors = F)
+        dataset <- fread("data/ADL.csv",stringsAsFactors = F)
       } else{
         dataset <- fread(input$inputFile$datapath,stringsAsFactors = F,na.strings=c("NA","N/A","null",""," "),showProgress = T)
       }
@@ -43,12 +47,20 @@ shinyServer(function(input, output, session) {
       }
       if(!is.null(dataset$start)){
         if(!is.numeric(dataset$start)){
-          dataset$start <- parsedate::parse_date(dataset$start)
+          if(TRY_PARSE_DATE){
+            dataset$start <- parsedate::parse_date(dataset$start)
+          } else{
+            dataset$start <- as.POSIXct(dataset$start)
+          }
         }
       }
       if(!is.null(dataset$end)){
         if(!is.numeric(dataset$end)){
-          dataset$end <- parsedate::parse_date(dataset$end)
+          if(TRY_PARSE_DATE){
+            dataset$end <- parsedate::parse_date(dataset$end)
+          } else{
+            dataset$end <- as.POSIXct(dataset$end)
+          }
         }
       } else{
         dataset$end <- dataset$start + 1
@@ -59,7 +71,7 @@ shinyServer(function(input, output, session) {
       }
       
       dataset$type <- as.factor(dataset$type)
-      
+      dataset$sessionId <- as.factor(dataset$sessionId)
       return(dataset)
       
       
@@ -70,6 +82,8 @@ shinyServer(function(input, output, session) {
     return(dataset)
   })
   
+  
+  ## Get all the possible values of sessionId
   getSessions <- reactive({
     dataset <- getDataset()
     if(!is.null(dataset)){
@@ -81,27 +95,44 @@ shinyServer(function(input, output, session) {
     }
   })
   
-  
+  ## Get a dataset filtered by the selected session and types
   getFilteredSession <- reactive({
     dataset <- getDataset()
-    if(!is.null(dataset) & !is.null(input$slider) & !is.null(input$sessionSelect)){
-      filtered <- dataset %>% filter(start >= input$slider[1], end <= input$slider[2], sessionId == input$sessionSelect) %>% data.frame()
+    if(!is.null(dataset) & !is.null(input$sessionSelect) & !is.null(input$typesSelect)){
+      filtered <- dataset %>% filter(sessionId == input$sessionSelect, type %in% input$typesSelect) %>% data.frame()
+      print(input$sessionSelect)
+      cat("\nFound",nrow(filtered),"events for session",input$sessionSelect,"\n")
+      
+      if(input$groupAdjacent){
+        source("R/timelineUtils.R")
+          filtered <- joinAdjacentEvents(filtered,minGapInSeconds =input$minGap)
+      }
+      
       return(filtered)
     }
     return(NULL)
     
   })
   
+  ## Get a dataset filtered by the selected time range
   getFilteredEntireDataset <- reactive({
     dataset <- getDataset()
-    if(!is.null(dataset) & !is.null(input$slider) & !is.null(input$sessionSelect)){
-      filtered <- dataset %>% filter(start >= input$slider[1], end <= input$slider[2]) %>% data.frame()
+    if(!is.null(dataset) & !is.null(input$typesSelect)){
+      filtered <- dataset %>% filter(type %in% input$typesSelect) %>% data.frame()
+      
+      if(input$groupAdjacent){
+        source("R/timelineUtils.R")
+        filtered <- joinAdjacentEvents(filtered,minGapInSeconds =input$minGap)
+      }
+      
       return(filtered)
     }
     return(NULL)
   })
   
+  #### --- Server side UI elements ---- ####
   
+  ## server side selectInput for session selection (out of the list of possible sessions in the data) 
   output$sessionSelect <- renderUI({
     input$inputFile
     sessions <- getSessions()
@@ -111,17 +142,58 @@ shinyServer(function(input, output, session) {
     selectInput("sessionSelect", "Choose Session:", as.list(sessions),selected = sessions[1]) 
   })
   
+  ## Slider for selecting min and max time/date values for timeline 
   output$slider <- renderUI({
+    input$sessionSelect
     dataset <- getDataset()
     if(is.null(dataset)){
       s <- NULL
     } else{
-      mini = min(dataset$start)
+      dataset <- dataset %>% filter(sessionId == input$sessionSelect) %>% arrange(start)
+      
+      mini = dataset[1,'start']
       maxi = max(dataset$end)
-      s <- sliderInput("slider","Time range",min = mini,max = maxi,value = c(mini,maxi),step = 1)
+      
+      mini = dataset[1,'start']
+      maxDateValueToShow <- ifelse(nrow(dataset) > 50,50,nrow(dataset))
+      endVal = dataset[maxDateValueToShow,'end']
+      s <- sliderInput("slider","Time range",min = mini,max = maxi,value = c(mini,endVal),step = 1)
     }
     s
   })
+  
+  ## update slider values if session changes
+  observe({
+    input$sessionSelect
+    
+    dataset <- getDataset()
+    if(is.null(dataset) | is.null(input$sessionSelect)){
+      return(NULL)
+    }
+    dataset <- dataset %>% filter(sessionId == input$sessionSelect) %>% arrange(start)
+    
+    mini = dataset[1,'start']
+    maxi = max(dataset$end)
+    
+    mini = dataset[1,'start']
+    maxDateValueToShow <- ifelse(nrow(dataset) > 50,50,nrow(dataset))
+    endVal = dataset[maxDateValueToShow,'end']
+    updateSliderInput(session,inputId = "slider",label = "Time range",min = mini,max = maxi,value = c(mini,endVal),step = 1)
+  })
+  
+  output$typesSelect <- renderUI({
+    dataset <- getDataset()
+    if(is.null(dataset)){
+      return(list())
+    }
+    
+    types <- unlist(unique(dataset$type))
+    
+    selectizeInput(
+      'typesSelect', 'Select event types to show', choices = types, multiple = TRUE,selected = types)
+    
+  })
+  
   
   ####-------- Timeline plot --------#####
   
@@ -129,27 +201,9 @@ shinyServer(function(input, output, session) {
     source("R/timelineUtils.R")
     sessionDataset = getFilteredSession()
     
-    
-    validate(
-      need(!is.null(sessionDataset),
-           "Welcome to the events visualization tool. This tools allows you to analyze events using a timeline.
-
-            Please upload a valid CSV file with these columns: 
-           - type (type of event, row in timeline)
-           - label (value of event)
-           - start (start time of event)
-           - end (end time of event)
-           - sessionId (optional, for example: userId, session, sensorId etc.)           
-
-           Start and end should be dates in the format YYYY-MM-DD hh:mm:ss TZ"
-      ),errorClass = "info"
-      
-    )
-    
-    if(is.null(sessionDataset)){
+    if(is.null(sessionDataset) | is.null(input$slider)){
       return(NULL)
     }
-    
     
     validate(
       need(!is.null(sessionDataset$sessionId),"session column missing"),
@@ -159,8 +213,12 @@ shinyServer(function(input, output, session) {
       need(!is.null(sessionDataset$label),"label column missing"),
       errorClass = "validation"
     )
+    sessionDataset <- sessionDataset %>% filter(start <= end) %>% filter(start >= input$slider[1], end <= input$slider[2])
     
-    tl <- getTimeline(sessionDataset = sessionDataset,joinNeighbors = input$groupAdjacent,joinGapInSeconds = input$minGap)
+    
+    tl <- getTimeline(sessionDataset = sessionDataset,
+                      joinNeighbors = input$groupAdjacent,
+                      joinGapInSeconds = input$minGap, plotWidth = max(1000,nrow(sessionDataset)*50))
     
     tl
     
@@ -186,10 +244,12 @@ shinyServer(function(input, output, session) {
   ####-------- across sessions plots --------#####
   
   output$distributions <- renderPlot({
-    dataset = getFilteredEntireDataset()
-    if(is.null(dataset)){
+    dataset = getDataset()
+    if(is.null(dataset) | is.null(input$typesSelect)){
       return(NULL)
     }
+    
+    dataset <- dataset %>% filter(type %in% input$typesSelect)
     
     dataset$event <- paste0(dataset$type,": ",dataset$label)
     
@@ -212,14 +272,16 @@ shinyServer(function(input, output, session) {
       geom_bar(position = "fill",stat = "identity") + coord_flip()
     
     #print(grouped)
-
+    
   })
-
+  
   ####-------- in session plots --------#####
   
   output$inSessionDistribution <- renderPlot({
     dataset = getFilteredSession()
     if(!is.null(dataset)){
+      
+      dataset <- dataset %>% filter(type %in% input$typesSelect)
       
       dataset$event <- paste0(dataset$type,": ",dataset$label)
       
@@ -252,9 +314,12 @@ shinyServer(function(input, output, session) {
   output$consecutives <- renderVisNetwork({
     source("R/networkUtils.R")
     input$sessionSelect
-    dataset = getFilteredEntireDataset()
+    dataset = getDataset()
     if(!is.null(dataset)){
-       if(input$consecutivePerSession==FALSE){
+      
+      dataset <- dataset %>% filter(type %in% input$typesSelect)
+      
+      if(input$consecutivePerSession==FALSE){
         session = input$sessionSelect
         getConsecutiveNetwork(events = dataset,sesId = session,maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
       } else{
