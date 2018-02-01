@@ -16,7 +16,6 @@
 #if(!require(dplyr)) install.packages("dplyr")
 #if(!require(DT)) install.packages("DT")
 #if(!require(lubridate)) install.packages("lubridate")
-#if(!require(ggvis)) install.packages("ggvis")
 
 
 library(shiny)
