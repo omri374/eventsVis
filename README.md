@@ -56,6 +56,7 @@ Visualization: visNetwork
 
 ## Run the app locally:
 Clone the github repo to your PC. Should work on Windows/Mac/Linux, tested on Windows
+
 Option 1: Open the project in R studio, open the server.R file and click on the play button. 
 
 Option 2: Install the 'shiny' package and call
