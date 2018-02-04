@@ -30,10 +30,6 @@ You can see a live example of the tool on ShinyApps (a bit slow but works):
 
 In addition, it allows you to group adjacent similar events together (to ignore the effect of multiple events calls that are actually one event in reality).
 
-
-### Events distributions accross sessions:
-![Distributions](https://github.com/omri374/eventsVis/raw/master/img/distributions.png)
-
 ### Consecutive events analysis
 Which events occur after others? *Notice the cluster around kitchen activity*
 
@@ -47,6 +43,10 @@ Which events co-occur together with others? *Notice the cluster/clique around ki
 ![Consecutive](https://github.com/omri374/eventsVis/raw/master/img/cooccurring.png)
 
 Visualization: visNetwork
+
+
+### Events distributions accross sessions:
+![Distributions](https://github.com/omri374/eventsVis/raw/master/img/distributions.png)
 
 
 ### SQL querying: 
