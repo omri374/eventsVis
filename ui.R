@@ -53,12 +53,14 @@ ui <- dashboardPage(
                 
                 ## Types selection (which even types should be taken into account)
                 shiny::htmlOutput("typesSelect"),
-                
+                              
                 ## Whether to group adjacent events of the same type and label (could be due to multiple readings of the same event)
                 checkboxInput("groupAdjacent",label = "Group adjacent events together",value = FALSE),
-                
                 ## Minimum gap for adjacent events grouping
-                numericInput("minGap","Minimum gap for grouping identical adjacent events",min = 0,value = 5)
+                numericInput("minGap","Minimum gap for grouping identical adjacent events",min = 0,value = 5),
+                ## Whether to add time semantics (day of week, part of day)
+                checkboxInput("PartOfDay",label = "Add part of day events",value = FALSE),
+                checkboxInput("DayOfWeek",label = "Add day of week events",value = FALSE)
     ),width = '320px'),
   dashboardBody(    
     

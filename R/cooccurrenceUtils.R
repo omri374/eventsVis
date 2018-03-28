@@ -43,6 +43,12 @@ getCooccurrenceGraph <- function(sessionEvents, thresholdForCoccurring = 50){
   
 }
 
+getCooccurringEvents <- function(sessionEvents,tolerance = 25){
+  sessionEvents <- sessionEvents %>% mutate(event = as.character(paste0(type,":",label)), duration = end-start)
+  eventsDf <- sessionEvents %>% arrange(start) %>% group_by(event) %>% summarize(value = sum(duration), counter = n()) %>% mutate(id = 1:n())
+  getCooccurringEvents(sessionEvents,eventsDf,tolerance)
+}
+
 getCooccurringEvents <- function(sessionEvents, eventsDf, tolerance=25){
   library(lubridate)
   

@@ -72,6 +72,9 @@ shinyServer(function(input, output, session) {
       
       dataset$type <- as.factor(dataset$type)
       dataset$sessionId <- as.factor(dataset$sessionId)
+      
+   
+      
       return(dataset)
       
       
@@ -98,6 +101,9 @@ shinyServer(function(input, output, session) {
   ## Get a dataset filtered by the selected session and types
   getFilteredSession <- reactive({
     dataset <- getDataset()
+    
+
+    
     if(!is.null(dataset) & !is.null(input$sessionSelect) & !is.null(input$typesSelect)){
       filtered <- dataset %>% filter(sessionId == input$sessionSelect, type %in% input$typesSelect) %>% data.frame()
       print(input$sessionSelect)
@@ -106,6 +112,18 @@ shinyServer(function(input, output, session) {
       if(input$groupAdjacent){
         source("R/timelineUtils.R")
           filtered <- joinAdjacentEvents(filtered,minGapInSeconds =input$minGap)
+      }
+      
+      if(input$DayOfWeek){
+        source("R/timelineUtils.R")
+        days <- getDayOfWeek(filtered)
+        filtered <- bind_rows(filtered,days) %>% arrange(start)
+      }
+      
+      if(input$PartOfDay){
+        source("R/timelineUtils.R")
+        pods <- getPartOfDay(filtered)
+        filtered <- bind_rows(filtered,pods) %>% arrange(start)
       }
       
       return(filtered)
