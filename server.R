@@ -438,9 +438,11 @@ shinyServer(function(input, output, session) {
     
     edges$title <- NULL
     coocs <- inner_join(edges,nodes,by = c('from' = 'id'))
-    coocs <- inner_join(coocs,nodes,by = c('to' = 'id')) %>% transmute(first = label.x,second = label.y,count = value.x) %>% arrange(desc(count))
+    coocs <- inner_join(coocs,nodes,by = c('to' = 'id')) %>% transmute(Event1 = label.x,Event2 = label.y,count = value.x) %>% arrange(desc(count))
+    names(coocs)[3] <- 'Number of co-occurrences'
     coocs
-  })
+  },caption = 'Number of co-occurrences between events in the data',options = list(
+    pageLength = 10))
   
   
   
