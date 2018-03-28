@@ -73,7 +73,7 @@ shinyServer(function(input, output, session) {
       dataset$type <- as.factor(dataset$type)
       dataset$sessionId <- as.factor(dataset$sessionId)
       
-   
+      
       
       return(dataset)
       
@@ -102,7 +102,7 @@ shinyServer(function(input, output, session) {
   getFilteredSession <- reactive({
     dataset <- getDataset()
     
-
+    
     
     if(!is.null(dataset) & !is.null(input$sessionSelect) & !is.null(input$typesSelect)){
       filtered <- dataset %>% filter(sessionId == input$sessionSelect, type %in% input$typesSelect) %>% data.frame()
@@ -111,20 +111,26 @@ shinyServer(function(input, output, session) {
       
       if(input$groupAdjacent){
         source("R/timelineUtils.R")
-          filtered <- joinAdjacentEvents(filtered,minGapInSeconds =input$minGap)
+        filtered <- joinAdjacentEvents(filtered,minGapInSeconds =input$minGap)
       }
       
       if(input$DayOfWeek){
-        source("R/timelineUtils.R")
+        debugSource("R/timelineUtils.R")
         days <- getDayOfWeek(filtered)
-        filtered <- bind_rows(filtered,days) %>% arrange(start)
+        
+      } else{
+        days <- data.frame()
       }
       
       if(input$PartOfDay){
-        source("R/timelineUtils.R")
+        debugSource("R/timelineUtils.R")
         pods <- getPartOfDay(filtered)
-        filtered <- bind_rows(filtered,pods) %>% arrange(start)
+      } else{
+        pods <- data.frame()
       }
+      
+      filtered <- bind_rows(filtered,days) %>% bind_rows(pods) %>% arrange(start)
+      
       
       return(filtered)
     }
@@ -163,11 +169,12 @@ shinyServer(function(input, output, session) {
   ## Slider for selecting min and max time/date values for timeline 
   output$slider <- renderUI({
     input$sessionSelect
-    dataset <- getDataset()
+    dataset <- getFilteredSession()
     if(is.null(dataset)){
       s <- NULL
     } else{
-      dataset <- dataset %>% filter(sessionId == input$sessionSelect) %>% arrange(start)
+      #dataset <- dataset %>% filter(sessionId == input$sessionSelect) %>% arrange(start)
+      dataset <- dataset %>% arrange(start)
       
       mini = dataset[1,'start']
       maxi = max(dataset$end)
@@ -190,10 +197,9 @@ shinyServer(function(input, output, session) {
     }
     dataset <- dataset %>% filter(sessionId == input$sessionSelect) %>% arrange(start)
     
-    mini = dataset[1,'start']
     maxi = max(dataset$end)
+    mini = dataset[1,'start']    
     
-    mini = dataset[1,'start']
     maxDateValueToShow <- ifelse(nrow(dataset) > 50,50,nrow(dataset))
     endVal = dataset[maxDateValueToShow,'end']
     updateSliderInput(session,inputId = "slider",label = "Time range",min = mini,max = maxi,value = c(mini,endVal),step = 1)
@@ -209,6 +215,21 @@ shinyServer(function(input, output, session) {
     
     selectizeInput(
       'typesSelect', 'Select event types to show', choices = types, multiple = TRUE,selected = types)
+    
+  })
+  
+  output$eventsSelect <- renderUI({
+    dataset <- getFilteredSession()
+    if(is.null(dataset)){
+      return(list())
+    }
+    
+    dataset$event = as.character(paste0(dataset$type,":",dataset$label))
+    
+    events <- unlist(unique(dataset$event))
+    cat('events for coocs',events)
+    selectizeInput(
+      'eventsSelect', 'Select events to show', choices = events, multiple = TRUE,selected = events)
     
   })
   
@@ -247,7 +268,8 @@ shinyServer(function(input, output, session) {
   
   output$sql <- DT::renderDataTable({
     dataset = getFilteredSession()
-    
+    dataset$start <- as.character(dataset$start)
+    dataset$end <- as.character(dataset$end)
     if(is.null(dataset)){
       return(data.frame())
     }
@@ -332,17 +354,18 @@ shinyServer(function(input, output, session) {
   output$consecutives <- renderVisNetwork({
     source("R/networkUtils.R")
     input$sessionSelect
-    dataset = getDataset()
+    dataset = getFilteredSession()
     if(!is.null(dataset)){
       
       dataset <- dataset %>% filter(type %in% input$typesSelect)
-      
-      if(input$consecutivePerSession==FALSE){
-        session = input$sessionSelect
-        getConsecutiveNetwork(events = dataset,sesId = session,maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
-      } else{
-        getConsecutiveNetwork(events = dataset,sesId = NULL, maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
-      }  
+      withProgress({
+        if(input$consecutivePerSession==FALSE){
+          session = input$sessionSelect
+          getConsecutiveNetwork(events = dataset,sesId = session,maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
+        } else{
+          getConsecutiveNetwork(events = dataset,sesId = NULL, maxTimeForConsecutiveInSeconds = input$maxTimeForConsecutiveInSeconds,byDuration = (input$byDuration=="Sum by duration"))
+        }
+      },message = "Graph is rendering")
     }
   })
   
@@ -359,21 +382,64 @@ shinyServer(function(input, output, session) {
     }
   })
   
-  ####------ cooccurring events visNetwork ----- #####
-  output$cooccurring <- renderVisNetwork({
+  
+  coocsGraph <- reactive({
+    input$eventsSelect
     source("R/cooccurrenceUtils.R")
     input$sessionSelect
     dataset = getFilteredSession()
+    print(head(dataset))
+    print(input$eventsSelect)
+    dataset <- dataset %>% mutate(event = as.character(paste0(type,":",label))) %>% filter(event %in% input$eventsSelect)
+    print(head(dataset))
     if(!is.null(dataset)){
-      getCooccurrenceGraph(sessionEvents = dataset,thresholdForCoccurring =input$cooccurrenceThreshold)
-    }  
+      graph <- withProgress({
+        graph <- getCooccurrenceGraph(sessionEvents = dataset,thresholdForCoccurring =input$cooccurrenceThreshold)
+        
+        
+        
+      },message = "Loading coocs")
+    }
     
+    graph
+  })
+  
+  ####------ cooccurring events visNetwork ----- #####
+  output$cooccurring <- renderVisNetwork({
+    source("R/cooccurrenceUtils.R")
+    
+    graph <- coocsGraph()
+    edges <- graph[[1]]
+    if(nrow(edges) > 200){
+      stop('Too many co-occurrences for visualization. Consider selecting less events, types of time events')
+      return(NULL)
+    } else{
+      return(getCooccurrenceVisNetwork(graph))
+    }
   })
   
   output$visNetworkCoocsTitle <- renderText({
     
     paste("Which events co-occur with other events? (session", input$sessionSelect,"only)")
     
+  })
+  
+  ####---- Co-occcurrences table ---- ####
+  output$coocsTable <- DT::renderDataTable({
+    graph <- coocsGraph()
+    edges <- graph[[1]]
+    nodes <- graph[[2]]
+    edges <- ungroup(edges)
+
+    graph$edges <- edges
+    
+    edges$from <- as.integer(edges$from)
+    edges$to <- as.integer(edges$to)
+    
+    edges$title <- NULL
+    coocs <- inner_join(edges,nodes,by = c('from' = 'id'))
+    coocs <- inner_join(coocs,nodes,by = c('to' = 'id')) %>% transmute(first = label.x,second = label.y,count = value.x) %>% arrange(desc(count))
+    coocs
   })
   
   

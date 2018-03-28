@@ -40,7 +40,7 @@ ui <- dashboardPage(
                       "))
     ),
     sidebarMenu(style = "position: fixed; ",
-
+                
                 ## CSV File input
                 fileInput("inputFile", "Choose CSV File",
                           multiple = FALSE,
@@ -53,7 +53,7 @@ ui <- dashboardPage(
                 
                 ## Types selection (which even types should be taken into account)
                 shiny::htmlOutput("typesSelect"),
-                              
+                
                 ## Whether to group adjacent events of the same type and label (could be due to multiple readings of the same event)
                 checkboxInput("groupAdjacent",label = "Group adjacent events together",value = FALSE),
                 ## Minimum gap for adjacent events grouping
@@ -177,7 +177,7 @@ ui <- dashboardPage(
                htmlOutput("timeline")
                
                , style = "overflow:scroll;"),
-     
+      
       
       tabPanel("Consecutive events analysis",
                fluidRow(
@@ -208,9 +208,12 @@ ui <- dashboardPage(
                      
                      ## Maximum gap for two events to be considered cooccurring if they're not
                      numericInput("cooccurrenceThreshold",label = "Max gap for events to be considered co-occurring (co-occurrence threshold)",min = 0,value = 1,width = '15%'),
+                     shiny::htmlOutput("eventsSelect"),
                      
                      ## Co-occurring events graph visualization (visNetwork)
-                     visNetwork::visNetworkOutput("cooccurring"))
+                     visNetwork::visNetworkOutput("cooccurring"),
+                     DT::dataTableOutput('coocsTable'))
+                 
                  
                  
                )),

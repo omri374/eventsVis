@@ -3,7 +3,6 @@ library(dplyr)
 library(RColorBrewer)
 
 getCooccurrenceGraph <- function(sessionEvents, thresholdForCoccurring = 50){
-  
   if(missing(sessionEvents) | is.null(sessionEvents)| nrow(sessionEvents)==0){
     return(NULL)
   }
@@ -12,7 +11,7 @@ getCooccurrenceGraph <- function(sessionEvents, thresholdForCoccurring = 50){
                                         duration = ifelse(is.numeric(start),end - start,difftime(end,start,units = 'sec')))
   eventsDf <- events %>% arrange(start) %>% group_by(event) %>% summarize(value = sum(duration), counter = n()) %>% mutate(id = 1:n())
   
-  edges <- getCooccurringEvents(events,eventsDf,tolerance = thresholdForCoccurring)
+  edges <- getCoocsInner(events,eventsDf,tolerance = thresholdForCoccurring)
   
   if(nrow(edges) > 0){
     edges <- edges %>% group_by(first, second) %>% summarize(value = n()) %>% rename(from = first, to = second)
@@ -20,6 +19,15 @@ getCooccurrenceGraph <- function(sessionEvents, thresholdForCoccurring = 50){
   }
   
   nodes <- eventsDf %>% mutate(label = event,title = paste0("<p> <U>",label,"</U><BR><b>Count</b> = ",counter,"</p>"))
+  
+  return(list(edges,nodes))
+}
+
+getCooccurrenceVisNetwork <- function(graph){
+
+  edges <- graph[[1]]
+  nodes <- graph[[2]]
+  
   if(nrow(nodes)>3){
     if(nrow(nodes) > 12){
       colors <- rep(brewer.pal(12,'Paired'),nrow(nodes)/10)
@@ -46,13 +54,13 @@ getCooccurrenceGraph <- function(sessionEvents, thresholdForCoccurring = 50){
 getCooccurringEvents <- function(sessionEvents,tolerance = 25){
   sessionEvents <- sessionEvents %>% mutate(event = as.character(paste0(type,":",label)), duration = end-start)
   eventsDf <- sessionEvents %>% arrange(start) %>% group_by(event) %>% summarize(value = sum(duration), counter = n()) %>% mutate(id = 1:n())
-  getCooccurringEvents(sessionEvents,eventsDf,tolerance)
+  getCoocsInner(sessionEvents,eventsDf,tolerance)
 }
 
-getCooccurringEvents <- function(sessionEvents, eventsDf, tolerance=25){
+getCoocsInner <- function(sessionEvents, eventsDf, tolerance=25){
   library(lubridate)
   
-  sessionEvents <- arrange(sessionEvents,start) %>% inner_join(eventsDf,by='event')
+  sessionEvents <- sessionEvents %>% inner_join(eventsDf,by='event') %>% arrange(start) 
   
   startTimes <- as.numeric(sessionEvents$start)
   endTimes <- as.numeric(sessionEvents$end)
@@ -67,7 +75,7 @@ getCooccurringEvents <- function(sessionEvents, eventsDf, tolerance=25){
       if(startTimes[j] < endTimes[i] + tolerance & startTimes[j] > startTimes[i]){
         #coocs <- list(coocs,list(first = i,second = j))
         counter <- counter + 1
-        coocs[[counter]] <- data.frame(first = ids[i],second = ids[j])
+        coocs[[counter]] <- data.frame(one = ids[i],two = ids[j])
       }
       if(endTimes[j] + tolerance > endTimes[i]){
         break
@@ -77,6 +85,10 @@ getCooccurringEvents <- function(sessionEvents, eventsDf, tolerance=25){
   
   #Convert list of data frames to data frame
   cooccurrences <- do.call("rbind", coocs)
+  cooccurrences$one <- as.numeric(cooccurrences$one)
+  cooccurrences$two <- as.numeric(cooccurrences$two)
+  cooccurrences <- cooccurrences %>% mutate(first = ifelse(one < two,one,two),second = ifelse(one < two,two,one)) %>% select(first,second)
+  
   #print(cooccurrences)
   if(is.null(cooccurrences)){
     return(data.frame())

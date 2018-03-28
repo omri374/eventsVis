@@ -72,19 +72,23 @@ getPartOfDay <- function(events,eventType = 'TIME_PartOfDay'){
   if(length(unique(events$sessionId))> 1){
     stop('Part of day events are calculated for one session only.')
   }
+  
+  dataTZ = attr(events$start,"tzone")
+  
   allHours <- c()
   events <- data.frame(events)
   for(i in 1:nrow(events)){
     thisEventHours <- seq.POSIXt(from = events[i,'start'],to = events[i,'end'],by='hour')
     allHours <- list(allHours,thisEventHours)
   }
-  allHours <- as.POSIXct(unlist(allHours),origin = lubridate::origin)
-  
-  #allHours <- seq.POSIXt(min(events$start,na.rm = T),max(events$end,na.rm = T),by='hours')
+  allHours <- as.POSIXct(unlist(allHours),origin = '1970-01-01',tz = dataTZ)
+  #print(allHours)
   minute(allHours) <- 0
   second(allHours) <- 0
   
-  allHours
+  allHours <- unique(allHours)
+  
+  #allHours
   podID <- sapply(allHours, partOfDayID)
   podDF <- data.frame(start = allHours, pod = podID) %>% 
     mutate(label = partOfDayForID(pod),end = lead(start), 
@@ -108,13 +112,15 @@ getDayOfWeek <- function(events,eventType = 'TIME_DayOfWeek'){
   if(length(unique(events$sessionId))> 1){
     stop('Part of day events are calculated for one session only.')
   }
+  
+  dataTZ = attr(events$start,"tzone")
   allDays <- c()
   events <- data.frame(events)
   for(i in 1:nrow(events)){
     thisEventDays <- seq.POSIXt(from = events[i,'start'],to = events[i,'end'],by='day')
     allDays <- list(allDays,thisEventDays)
   }
-  allDays <- as.POSIXct(unlist(allDays),origin = lubridate::origin)
+  allDays <- as.POSIXct(unlist(allDays),origin = '1970-01-01',tz = dataTZ)
   
   #allHours <- seq.POSIXt(min(events$start,na.rm = T),max(events$end,na.rm = T),by='hours')
   hour(allDays) <- 0
